@@ -81,7 +81,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     (async () => {
       try {
         const { symbol, alias } = message;
-        const base = 'http://localhost:5001';
+        const stored = await chrome.storage.local.get('roslynBaseUrl');
+        const base = stored.roslynBaseUrl || 'http://localhost:5001';
 
         // Step 1: Search for matching types
         const searchResp = await fetch(`${base}/${alias}/search?q=${encodeURIComponent(symbol)}`);

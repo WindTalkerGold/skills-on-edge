@@ -55,7 +55,7 @@ function extractPageContent() {
 
 const hoverState = {
   enabled: false,
-  alias: 'finalizer',
+  alias: '',
   delay: 3000,
   timer: null,
   lastSymbol: null,
@@ -831,8 +831,7 @@ function buildModalContent(data) {
 
     // Deep-dive hint for large types
     if (members.length > 50) {
-      const skillName = hoverState.alias || 'finalizer';
-      html += `<div class="deepdive">\u{1f4a1} Large type (${members.length} members) \u2014 for deep analysis use <code>/csharp-roslyn-${escapeHtml(skillName)}</code> in Claude Code</div>`;
+      html += `<div class="deepdive">\u{1f4a1} Large type (${members.length} members) \u2014 for deep analysis use a Roslyn skill in Claude Code</div>`;
     }
   }
 

@@ -6,7 +6,7 @@
   "enabled": true,
   "needsSelection": false,
   "needsUserInput": true,
-  "inputPlaceholder": "Paste the full C# code here (Ctrl+V). ADO virtual scrolling truncates selections — paste is most reliable.",
+  "inputPlaceholder": "Paste the full C# code here (Ctrl+V). Some code viewers use virtual scrolling which truncates selections — paste is most reliable.",
   "tags": ["csharp", "code-review"],
   "actions": [
     {
