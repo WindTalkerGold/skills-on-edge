@@ -30,16 +30,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 function extractPageContent() {
-  // Get the main readable content from the page
   const article = document.querySelector('article') || document.querySelector('main') || document.body;
-  // Use live selection if available, otherwise fall back to last captured selection
   const liveSelection = window.getSelection().toString();
-  const selection = liveSelection || lastSelection;
+  let selection = liveSelection || lastSelection;
+
+  // If selection looks truncated (virtual scrolling), try the largest <pre>/<code> block instead
+  if (selection && /\n\s*[.…]{2,}\s*\n|\n\s*\.\.\.\s*\n/.test(selection)) {
+    let best = '';
+    document.querySelectorAll('pre, code').forEach(el => {
+      if (el.textContent.length > best.length) best = el.textContent;
+    });
+    if (best.length > selection.length) selection = best;
+  }
 
   return {
     title: document.title,
     url: window.location.href,
-    text: article.innerText.substring(0, 50000), // limit to ~50k chars
+    text: article.innerText.substring(0, 50000),
     selection
   };
 }

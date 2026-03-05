@@ -375,6 +375,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       return;
     }
 
+    // Debug: show selection size so user knows what was captured
+    console.log(`[Skills on Edge] Selection captured: ${content.selection?.length || 0} chars`);
+
     runSkillWithContent(skillId, content, extraSettings);
   }
 

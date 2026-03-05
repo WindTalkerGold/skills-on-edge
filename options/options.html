@@ -22,10 +22,19 @@
       <select id="default-provider" class="select"></select>
     </section>
 
+    <section class="section">
+      <h2>User Skills</h2>
+      <p class="hint">Import custom skill definitions (JSON files) to extend the extension with your own AI workflows.</p>
+      <div id="user-skills-list"></div>
+      <button id="import-skill" class="btn btn-secondary">Import Skill from JSON</button>
+      <input type="file" id="skill-file-input" accept=".json" style="display:none">
+    </section>
+
     <div id="status" class="status hidden"></div>
   </div>
 
   <script src="../lib/providers.js"></script>
+  <script src="../lib/skill-loader.js"></script>
   <script src="options.js"></script>
 </body>
 </html>

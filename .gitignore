@@ -7,3 +7,6 @@ dist/
 .DS_Store
 Thumbs.db
 .claude/
+user-skills/*
+!user-skills/.gitkeep
+!user-skills/csharp-simple-check.json

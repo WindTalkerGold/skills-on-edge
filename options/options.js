@@ -212,4 +212,77 @@ document.addEventListener('DOMContentLoaded', async () => {
     await Providers.save(providers);
     renderProviders();
   });
+
+  // === User Skills Management ===
+  const userSkillsListEl = document.getElementById('user-skills-list');
+  const importSkillBtn = document.getElementById('import-skill');
+  const skillFileInput = document.getElementById('skill-file-input');
+
+  async function renderUserSkills() {
+    const skills = await UserSkills.getAll();
+    userSkillsListEl.innerHTML = '';
+
+    if (skills.length === 0) {
+      userSkillsListEl.innerHTML = '<p class="hint">No user skills installed. Import a JSON file to get started.</p>';
+      return;
+    }
+
+    skills.forEach(skill => {
+      const card = document.createElement('div');
+      card.className = 'provider-card';
+      card.innerHTML = `
+        <div class="provider-header">
+          <span class="provider-name">${skill.icon || '⚡'} ${skill.name}</span>
+          <button class="remove-btn" data-remove-skill="${skill.id}">Remove</button>
+        </div>
+        <label>${skill.description || ''}</label>
+        <div class="skill-card-actions">
+          <label class="toggle-label">
+            <input type="checkbox" data-toggle-skill="${skill.id}" ${skill.enabled !== false ? 'checked' : ''}>
+            Enabled
+          </label>
+          <span class="skill-meta">${skill.actions?.length || 0} action(s) · ${(skill.tags || []).join(', ') || 'no tags'}</span>
+        </div>
+      `;
+      userSkillsListEl.appendChild(card);
+    });
+
+    // Bind toggle handlers
+    userSkillsListEl.querySelectorAll('[data-toggle-skill]').forEach(cb => {
+      cb.addEventListener('change', async () => {
+        await UserSkills.setEnabled(cb.dataset.toggleSkill, cb.checked);
+        showStatus(cb.checked ? 'Skill enabled' : 'Skill disabled');
+      });
+    });
+
+    // Bind remove handlers
+    userSkillsListEl.querySelectorAll('[data-remove-skill]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        await UserSkills.remove(btn.dataset.removeSkill);
+        renderUserSkills();
+        showStatus('Skill removed');
+      });
+    });
+  }
+
+  importSkillBtn.addEventListener('click', () => {
+    skillFileInput.click();
+  });
+
+  skillFileInput.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      await UserSkills.importFromJson(text);
+      await renderUserSkills();
+      showStatus(`Skill imported: ${file.name}`);
+    } catch (err) {
+      showStatus(`Import failed: ${err.message}`);
+    }
+    skillFileInput.value = '';
+  });
+
+  renderUserSkills();
 });
