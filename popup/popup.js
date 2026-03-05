@@ -88,24 +88,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     return btn;
   }
 
-  // Load and render predefined skills (JSON-defined, always on)
-  const predefinedSkills = await PredefinedSkills.getAll();
-  predefinedSkills.forEach(pSkill => {
-    skillsListEl.appendChild(renderJsonSkillButton(pSkill));
-  });
-
-  // Load and render user skills
+  // Load and render user skills (file-based examples + storage-imported)
   const userSkills = (await UserSkills.getAll()).filter(s => s.enabled !== false);
-  if (userSkills.length > 0) {
-    const divider = document.createElement('div');
-    divider.className = 'skills-divider';
-    divider.textContent = 'User Skills';
-    skillsListEl.appendChild(divider);
-
-    userSkills.forEach(uSkill => {
-      skillsListEl.appendChild(renderJsonSkillButton(uSkill));
-    });
-  }
+  userSkills.forEach(uSkill => {
+    skillsListEl.appendChild(renderJsonSkillButton(uSkill));
+  });
 
   function showUserInputPrompt(skill, isUserSkill = false) {
     resultDiv.innerHTML = '';

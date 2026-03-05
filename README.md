@@ -38,11 +38,11 @@ This extension is designed to be fully transparent and safe to use:
 
 ### JSON Workflow Skills
 
-Defined as `.json` files in `predefined-skills/` (built-in) or `user-skills/` (custom). These orchestrate LLM calls and HTTP requests in a pipeline. See [SKILLS.md](SKILLS.md) for the full reference.
+Defined as `.json` files in `user-skills/`. The repo ships with example skills (Explain, Key Points, Reply, C# Simple Check). You can add your own. See [SKILLS.md](SKILLS.md) for the full reference.
 
 ### Content-Script Skills
 
-Defined as folders in `user-skills/{skill-id}/` containing a `skill.json` and a `content.js`. These inject executable code into web pages — for example, the C# Symbol Hover skill injects a script that detects hover over C# symbols and queries a local Roslyn service. Content-script skills are only injected when you explicitly enable them from the popup.
+Defined as folders in `user-skills/{skill-id}/` containing a `skill.json` and a `content.js`. These inject executable code into web pages and are only activated when you explicitly enable them from the popup. Useful for interactive features that need DOM access.
 
 ## Creating Skills
 
@@ -68,12 +68,11 @@ output/                Pop-out output page
 lib/                   Shared libraries
   ├── providers.js     AI provider config (OpenAI, Anthropic, Azure, etc.)
   ├── skills.js        Built-in hardcoded skills
-  ├── skill-loader.js  Loads predefined + user skills from JSON
+  ├── skill-loader.js  Loads user skills from files + storage
   ├── skill-executor.js Runs skill action pipelines
   ├── template-engine.js  {{expression}} resolver
   └── stats.js         Token usage tracking
-predefined-skills/     Built-in JSON skill definitions
-user-skills/           Your custom skills (gitignored except examples)
+user-skills/           Skill definitions (examples tracked, custom gitignored)
 icons/                 Extension icons
 SKILLS.md              Full skill format reference and examples
 ```

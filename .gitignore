@@ -9,4 +9,7 @@ Thumbs.db
 .claude/
 user-skills/*
 !user-skills/.gitkeep
+!user-skills/explain.json
+!user-skills/keypoints.json
+!user-skills/reply.json
 !user-skills/csharp-simple-check.json

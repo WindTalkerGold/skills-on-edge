@@ -1,10 +1,12 @@
 {
   "id": "reply",
   "name": "Generate Reply",
-  "icon": "✉️",
-  "description": "Generates a professional reply to selected text.",
+  "icon": "\u2709\ufe0f",
+  "description": "Generates a professional reply based on page content and your instructions.",
   "enabled": true,
-  "needsSelection": true,
+  "needsSelection": false,
+  "needsUserInput": true,
+  "inputPlaceholder": "What should the reply say? e.g. 'Agree and suggest next Monday' or 'Politely decline'",
   "tags": ["writing"],
   "actions": [
     {
@@ -19,7 +21,7 @@
           },
           {
             "role": "user",
-            "content": "Generate a professional reply to the following message or text:\n\n{{context.selectionOrText}}"
+            "content": "Generate a professional reply to the following message or text:\n\n{{context.selectionOrText}}\n\nInstructions for the reply: {{settings.userInput}}"
           }
         ]
       }
