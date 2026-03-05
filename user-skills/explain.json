@@ -15,11 +15,11 @@
         "messages": [
           {
             "role": "system",
-            "content": "You are a helpful assistant. Explain concepts clearly and simply.{{langInstruction}}"
+            "content": "You are a helpful assistant. When the user selects a word, term, or short phrase, explain what it means — treat it as a concept to look up, not text to paraphrase. Use the surrounding page content for context. For longer selections, explain the content clearly and simply.{{langInstruction}}"
           },
           {
             "role": "user",
-            "content": "Explain the following text in simple, easy-to-understand terms:\n\n{{context.selectionOrText}}"
+            "content": "Explain this:\n\n{{context.selection}}\n\nPage context (for reference):\n\nTitle: {{context.title}}\n\n{{context.text}}"
           }
         ]
       }
