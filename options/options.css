@@ -1,0 +1,164 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #1a1a2e;
+  color: #e0e0e0;
+  min-height: 100vh;
+}
+
+.container {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 32px 24px;
+}
+
+h1 {
+  font-size: 22px;
+  color: #fff;
+  margin-bottom: 24px;
+}
+
+h2 {
+  font-size: 16px;
+  color: #ccc;
+  margin-bottom: 8px;
+}
+
+.hint {
+  font-size: 12px;
+  color: #888;
+  margin-bottom: 12px;
+}
+
+.section {
+  margin-bottom: 24px;
+}
+
+.provider-card {
+  background: #16213e;
+  border: 1px solid #333;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 8px;
+}
+
+.provider-card .provider-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.provider-card .provider-name {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.provider-card .remove-btn {
+  background: none;
+  border: none;
+  color: #ff4444;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 6px;
+}
+
+.provider-card .remove-btn:hover {
+  color: #ff6666;
+}
+
+.provider-card label {
+  display: block;
+  font-size: 11px;
+  color: #888;
+  margin-bottom: 2px;
+  margin-top: 6px;
+}
+
+.input, .select {
+  width: 100%;
+  padding: 8px 10px;
+  background: #0f1729;
+  border: 1px solid #333;
+  border-radius: 6px;
+  color: #e0e0e0;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.input:focus, .select:focus {
+  outline: none;
+  border-color: #4a9eff;
+}
+
+.model-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.model-row .model-select {
+  flex: 1;
+}
+
+.btn-refresh {
+  padding: 8px 12px;
+  background: #1a3a5c;
+  color: #4a9eff;
+  border: 1px solid #333;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+
+.btn-refresh:hover:not(:disabled) {
+  background: #244a6c;
+}
+
+.btn-refresh:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.btn-secondary {
+  background: #16213e;
+  color: #4a9eff;
+  border: 1px solid #333;
+  margin-top: 8px;
+}
+
+.btn-secondary:hover {
+  background: #1a3a5c;
+}
+
+.status {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #2a6e2a;
+  color: #fff;
+  padding: 8px 20px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.hidden {
+  display: none;
+}

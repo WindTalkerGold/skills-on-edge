@@ -10,26 +10,40 @@
   <div class="container">
     <header>
       <h1>Skills on Edge</h1>
-      <p class="subtitle">AI-powered reading assistant</p>
+      <div class="header-selects">
+        <select id="provider-select"></select>
+        <select id="lang-select"></select>
+      </div>
     </header>
 
-    <section id="skills-list">
-      <button class="skill-btn" data-skill="summarize">Summarize Page</button>
-      <button class="skill-btn" data-skill="explain">Explain Selection</button>
-      <button class="skill-btn" data-skill="translate">Translate</button>
-      <button class="skill-btn" data-skill="keypoints">Key Points</button>
-    </section>
+    <section id="skills-list"></section>
 
     <section id="output" class="hidden">
       <div id="result"></div>
-      <button id="close-output" class="secondary-btn">Close</button>
+      <div class="output-actions">
+        <button id="copy-output" class="secondary-btn">Copy</button>
+        <button id="popout-output" class="secondary-btn">Pop Out</button>
+        <button id="close-output" class="secondary-btn">Close</button>
+      </div>
+    </section>
+
+    <section id="stats-panel" class="hidden">
+      <div class="stats-header">
+        <span>Usage Statistics</span>
+        <button id="close-stats" class="secondary-btn">Close</button>
+      </div>
+      <div id="stats-content"></div>
     </section>
 
     <footer>
+      <a href="#" id="stats-link">Stats</a>
+      <span class="footer-sep">|</span>
       <a href="#" id="settings-link">Settings</a>
     </footer>
   </div>
 
+  <script src="../lib/providers.js"></script>
+  <script src="../lib/skills.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>
