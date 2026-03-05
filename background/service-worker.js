@@ -4,6 +4,7 @@ importScripts('../lib/stats.js');
 importScripts('../lib/template-engine.js');
 importScripts('../lib/skill-loader.js');
 importScripts('../lib/skill-executor.js');
+importScripts('../lib/text-utils.js');
 
 // Context menu for running skills on selected text
 chrome.runtime.onInstalled.addListener(() => {
@@ -131,6 +132,143 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
+// Helper: make a non-streaming LLM call and return the text
+async function llmCall(provider, messages) {
+  const req = Providers.buildRequest(provider, messages, false);
+  const response = await fetch(req.url, req.options);
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`API error ${response.status}: ${errorText}`);
+  }
+  const json = await response.json();
+  if (provider.anthropic) {
+    return (json.content || []).map(b => b.text || '').join('');
+  }
+  return json.choices?.[0]?.message?.content || '';
+}
+
+// Helper: stream an LLM call, sending STREAM_TOKEN messages to port, return full text
+async function llmStream(provider, messages, port) {
+  const req = Providers.buildRequest(provider, messages, true);
+  const response = await fetch(req.url, req.options);
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`API error ${response.status}: ${errorText}`);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let fullText = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop();
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || !trimmed.startsWith('data: ')) continue;
+      const data = trimmed.slice(6);
+      if (data === '[DONE]') continue;
+
+      try {
+        const parsed = JSON.parse(data);
+        let token = '';
+        if (provider.anthropic) {
+          if (parsed.type === 'content_block_delta') {
+            token = parsed.delta?.text || '';
+          }
+        } else {
+          token = parsed.choices?.[0]?.delta?.content || '';
+        }
+        if (token) {
+          fullText += token;
+          port.postMessage({ type: 'STREAM_TOKEN', token });
+        }
+      } catch { /* skip unparseable */ }
+    }
+  }
+  return fullText;
+}
+
+// Multi-round chunked summarize for large content
+async function handleChunkedSummarize(provider, content, settings, skillId, port) {
+  const langNote = settings?.outputLang ? ` Respond in ${settings.outputLang}.` : '';
+  const text = content.text || '';
+  let totalSent = 0;
+  let totalReceived = 0;
+
+  function trackTokens(input, output) {
+    totalSent += estimateTokens(input);
+    totalReceived += estimateTokens(output);
+  }
+
+  // --- Round 1: Peek (head + tail) ---
+  const head = text.substring(0, 2000);
+  const tail = text.substring(Math.max(0, text.length - 2000));
+  const peekText = head + '\n...\n' + tail;
+
+  port.postMessage({ type: 'STREAM_TOKEN', token: '\n📋 Phase 1/5: Identifying content...\n' });
+
+  const peekMessages = [
+    { role: 'system', content: 'You are a content analyst. Identify the topic, structure, and key themes of this content. Be concise (2-4 sentences).' + langNote },
+    { role: 'user', content: `Title: ${content.title || ''}\n\nHere is the beginning and end of a long document:\n\n${peekText}` }
+  ];
+  const overview = await llmCall(provider, peekMessages);
+  trackTokens(peekMessages.map(m => m.content).join(' '), overview);
+  port.postMessage({ type: 'STREAM_TOKEN', token: overview + '\n' });
+
+  // --- Rounds 2-4: Process middle chunks ---
+  const middleStart = 2000;
+  const middleEnd = Math.max(middleStart, text.length - 2000);
+  const middleText = text.substring(middleStart, middleEnd);
+
+  let accumulated = overview;
+  const chunks = TextUtils.chunkText(middleText, 3);
+
+  for (let i = 0; i < chunks.length; i++) {
+    const round = i + 2;
+    const extracted = TextUtils.extractUsefulText(chunks[i], 4000);
+
+    if (extracted.trim().length < 50) continue; // skip near-empty chunks
+
+    port.postMessage({ type: 'STREAM_TOKEN', token: `\n📋 Phase ${round}/5: Processing chunk ${i + 1}/${chunks.length}...\n` });
+
+    const chunkMessages = [
+      { role: 'system', content: 'You are a summarization assistant. Given what we know so far and a new chunk of text, extract any new key information not already covered. Be concise — bullet points preferred. If no new information, reply with "No new information."' + langNote },
+      { role: 'user', content: `What we know so far:\n${accumulated}\n\n---\nNew chunk:\n${extracted}` }
+    ];
+    const findings = await llmCall(provider, chunkMessages);
+    trackTokens(chunkMessages.map(m => m.content).join(' '), findings);
+    port.postMessage({ type: 'STREAM_TOKEN', token: findings + '\n' });
+
+    // If no new info, skip remaining chunks
+    if (/no new information/i.test(findings)) break;
+
+    accumulated += '\n' + findings;
+  }
+
+  // --- Round 5: Final synthesis (streaming) ---
+  port.postMessage({ type: 'STREAM_TOKEN', token: '\n📋 Phase 5/5: Final summary...\n' });
+
+  const synthMessages = [
+    { role: 'system', content: 'You are a summarization expert. Synthesize a final concise bullet-point summary from the accumulated notes below. Use 3-7 bullets max. Each bullet should be one short sentence. No introduction, no filler.' + langNote },
+    { role: 'user', content: `Synthesize a final summary from these notes:\n\n${accumulated}` }
+  ];
+  const synthSent = synthMessages.map(m => m.content).join(' ');
+  const synthResult = await llmStream(provider, synthMessages, port);
+  trackTokens(synthSent, synthResult);
+
+  // Record total usage
+  Stats.record(totalSent, totalReceived, provider.id, skillId || 'summarize');
+
+  port.postMessage({ type: 'STREAM_DONE' });
+}
+
 // Streaming API calls via long-lived port connections
 chrome.runtime.onConnect.addListener((port) => {
   if (port.name !== 'ai-stream') return;
@@ -140,6 +278,16 @@ chrome.runtime.onConnect.addListener((port) => {
       const { skillDef, context, settings, provider } = message;
       try {
         await SkillExecutor.execute(skillDef, context, settings, provider, port);
+      } catch (err) {
+        port.postMessage({ type: 'STREAM_ERROR', error: err.message });
+      }
+      return;
+    }
+
+    if (message.type === 'CHUNKED_SUMMARIZE') {
+      const { provider, content, settings, skillId } = message;
+      try {
+        await handleChunkedSummarize(provider, content, settings, skillId, port);
       } catch (err) {
         port.postMessage({ type: 'STREAM_ERROR', error: err.message });
       }
