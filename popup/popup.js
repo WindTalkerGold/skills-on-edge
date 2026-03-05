@@ -476,16 +476,24 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     const provider = await Providers.getActive();
-    const messages = skill.buildMessages(content, skillSettings);
+
+    // For summarize with large content, use chunked multi-round approach
+    // Threshold: use 60% of context window (leave room for system prompt + output)
+    // contextWindow is in k tokens, ~3.5 chars per token
+    const contextChars = (provider.contextWindow || 128) * 1000 * 3.5 * 0.6;
+    const textToCheck = content.text || '';
+    const useChunked = skillId === 'summarize' && textToCheck.length > contextChars;
+
+    const messages = useChunked ? null : skill.buildMessages(content, skillSettings);
 
     // Stream via background service worker
-    resultDiv.textContent = 'Thinking...';
+    resultDiv.textContent = useChunked ? 'Analyzing long content...' : 'Thinking...';
 
     const port = chrome.runtime.connect({ name: 'ai-stream' });
 
     port.onMessage.addListener((msg) => {
       if (msg.type === 'STREAM_TOKEN') {
-        if (resultDiv.textContent === 'Thinking...') {
+        if (resultDiv.textContent === 'Thinking...' || resultDiv.textContent === 'Analyzing long content...') {
           resultDiv.textContent = '';
         }
         resultDiv.textContent += msg.token;
@@ -500,12 +508,22 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     });
 
-    port.postMessage({
-      type: 'STREAM_REQUEST',
-      provider,
-      messages,
-      skillId
-    });
+    if (useChunked) {
+      port.postMessage({
+        type: 'CHUNKED_SUMMARIZE',
+        provider,
+        content,
+        settings: skillSettings,
+        skillId
+      });
+    } else {
+      port.postMessage({
+        type: 'STREAM_REQUEST',
+        provider,
+        messages,
+        skillId
+      });
+    }
   }
 
   async function runUserSkill(skillDef, extraSettings) {

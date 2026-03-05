@@ -34,11 +34,35 @@ This extension is designed to be fully transparent and safe to use:
 - **User skills are local.** Custom skills in `user-skills/` are just JSON files and optional content scripts on your machine. You control what's installed.
 - **Auditable.** You can ask Claude Code (or read the source yourself) to verify that the extension does exactly what it claims — nothing more.
 
+## Skill Context
+
+Skills can access several types of context from the current page. Each skill explicitly declares which context it uses — there is no implicit access.
+
+| Context | Description |
+|---------|-------------|
+| **Selected text** | Text the user has highlighted on the page |
+| **Whole page** | Full page content (title + body text, up to 50k chars) |
+| **User input** | Text the user types/pastes in a prompt before the skill runs |
+| **Hovered element** | The word or symbol under the mouse cursor (content-script skills only) |
+
+### Example skills and their context usage
+
+| Skill | Selected | Whole page | User input |
+|-------|:--------:|:----------:|:----------:|
+| Summarize | | x | |
+| Translate | x (fallback: page) | fallback | |
+| Am I Right? | x (fallback: page) | title + fallback | x |
+| Explain | x | x (as background context) | |
+| Reply | x (fallback: page) | fallback | x |
+| C# Simple Check | | | x |
+
+When creating a skill, you choose which context to pass to the LLM via template expressions like `{{context.selection}}`, `{{context.text}}`, and `{{settings.userInput}}`. Hovered element context is available to content-script skills that inject into the page and detect mouse position directly — no bundled example skills use this currently, but the extension supports it.
+
 ## Skill Types
 
 ### JSON Workflow Skills
 
-Defined as `.json` files in `user-skills/`. The repo ships with example skills (Explain, Key Points, Reply, C# Simple Check). You can add your own. See [SKILLS.md](SKILLS.md) for the full reference.
+Defined as `.json` files in `user-skills/`. The repo ships with example skills (Explain, Reply, C# Simple Check). You can add your own. See [SKILLS.md](SKILLS.md) for the full reference.
 
 ### Content-Script Skills
 

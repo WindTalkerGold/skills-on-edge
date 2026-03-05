@@ -124,6 +124,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         </div>
       `;
 
+      // Context window size
+      fields += `
+        <label>Context Window (k tokens)</label>
+        <input type="number" class="input" data-id="${p.id}" data-field="contextWindow" value="${p.contextWindow || 128}" min="1" step="1" placeholder="128">
+      `;
+
       const removeBtn = p.builtin ? '' : `<button class="remove-btn" data-remove="${p.id}">Remove</button>`;
 
       card.innerHTML = `
@@ -143,14 +149,14 @@ document.addEventListener('DOMContentLoaded', async () => {
       defaultProviderEl.appendChild(opt);
     });
 
-    // Bind text input changes (baseUrl, apiKey)
+    // Bind text input changes (baseUrl, apiKey, contextWindow)
     providerListEl.querySelectorAll('input[data-id]').forEach(input => {
       input.addEventListener('change', async () => {
         const id = input.dataset.id;
         const field = input.dataset.field;
         const provider = providers.find(p => p.id === id);
         if (provider) {
-          provider[field] = input.value;
+          provider[field] = input.type === 'number' ? parseInt(input.value, 10) || 128 : input.value;
           await Providers.save(providers);
           showStatus('Saved');
         }
