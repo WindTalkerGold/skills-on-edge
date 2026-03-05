@@ -1,6 +1,9 @@
 // Skills on Edge - Background Service Worker
 importScripts('../lib/providers.js');
 importScripts('../lib/stats.js');
+importScripts('../lib/template-engine.js');
+importScripts('../lib/skill-loader.js');
+importScripts('../lib/skill-executor.js');
 
 // Context menu for running skills on selected text
 chrome.runtime.onInstalled.addListener(() => {
@@ -36,7 +39,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           // Content script not injected — try injecting on demand
         }
 
-        // Fallback: inject and execute directly via scripting API
+        // Fallback: inject content script first so lastSelection is available, then extract
+        try {
+          await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            files: ['content/content.js']
+          });
+          // Now try sending again — content script should be loaded
+          const retryResult = await chrome.tabs.sendMessage(tab.id, { type: 'EXTRACT_CONTENT' });
+          if (retryResult) { sendResponse(retryResult); return; }
+        } catch { /* injection failed, use direct approach */ }
+
+        // Last resort: direct extraction (selection may be empty)
         const [{ result }] = await chrome.scripting.executeScript({
           target: { tabId: tab.id },
           func: () => {
@@ -60,6 +74,94 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type === 'GET_STATS') {
     Stats.getStats().then(stats => sendResponse(stats));
+    return true;
+  }
+
+  if (message.type === 'SYMBOL_QUERY') {
+    (async () => {
+      try {
+        const { symbol, alias } = message;
+        const base = 'http://localhost:5001';
+
+        // Step 1: Search for matching types
+        const searchResp = await fetch(`${base}/${alias}/search?q=${encodeURIComponent(symbol)}`);
+        if (!searchResp.ok) {
+          sendResponse({ error: `Roslyn service error: HTTP ${searchResp.status}` });
+          return;
+        }
+        const searchJson = await searchResp.json();
+        const searchResults = searchJson.results || searchJson;
+
+        if (!searchResults || searchResults.length === 0) {
+          sendResponse({ error: `No results found for "${symbol}"` });
+          return;
+        }
+
+        // Step 2: Get full type details for the best match
+        const bestMatch = searchResults[0];
+        const fullName = bestMatch.fullName || bestMatch.FullName || bestMatch.name || bestMatch.Name;
+
+        let typeInfo = null;
+        try {
+          const typeResp = await fetch(`${base}/${alias}/type/${encodeURIComponent(fullName)}`);
+          if (typeResp.ok) {
+            typeInfo = await typeResp.json();
+          }
+        } catch { /* type endpoint failed, continue with search result */ }
+
+        // Step 3: Get references
+        let references = null;
+        try {
+          const refsResp = await fetch(`${base}/${alias}/references/${encodeURIComponent(fullName)}`);
+          if (refsResp.ok) {
+            const refsJson = await refsResp.json();
+            references = refsJson.references || refsJson;
+          }
+        } catch { /* references endpoint failed, continue without */ }
+
+        sendResponse({
+          searchResults,
+          typeInfo,
+          references,
+          matchedName: fullName
+        });
+      } catch (err) {
+        sendResponse({ error: `Roslyn service unavailable: ${err.message}` });
+      }
+    })();
+    return true;
+  }
+
+  if (message.type === 'SET_HOVER_MODE') {
+    (async () => {
+      try {
+        const { enabled, alias, delay, tabId } = message;
+        // Forward to content script in the specified tab
+        const targetTabId = tabId || (sender.tab && sender.tab.id);
+        if (!targetTabId) {
+          // If from popup, get active tab
+          const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+          if (tab) {
+            await chrome.tabs.sendMessage(tab.id, {
+              type: 'SET_HOVER_MODE',
+              enabled,
+              alias,
+              delay
+            });
+          }
+        } else {
+          await chrome.tabs.sendMessage(targetTabId, {
+            type: 'SET_HOVER_MODE',
+            enabled,
+            alias,
+            delay
+          });
+        }
+        sendResponse({ ok: true });
+      } catch (err) {
+        sendResponse({ error: err.message });
+      }
+    })();
     return true;
   }
 
@@ -104,6 +206,16 @@ chrome.runtime.onConnect.addListener((port) => {
   if (port.name !== 'ai-stream') return;
 
   port.onMessage.addListener(async (message) => {
+    if (message.type === 'EXECUTE_SKILL_WORKFLOW') {
+      const { skillDef, context, settings, provider } = message;
+      try {
+        await SkillExecutor.execute(skillDef, context, settings, provider, port);
+      } catch (err) {
+        port.postMessage({ type: 'STREAM_ERROR', error: err.message });
+      }
+      return;
+    }
+
     if (message.type !== 'STREAM_REQUEST') return;
 
     const { provider, messages, skillId } = message;

@@ -54,7 +54,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     chrome.storage.local.set({ outputLang: langSelect.value });
   });
 
-  // Render skill buttons
+  // Render hardcoded skill buttons (Summarize, Translate, Am I Right)
   const skills = getAllSkills();
   skills.forEach(skill => {
     const btn = document.createElement('button');
@@ -71,7 +71,43 @@ document.addEventListener('DOMContentLoaded', async () => {
     skillsListEl.appendChild(btn);
   });
 
-  function showUserInputPrompt(skill) {
+  // Helper to render a JSON-defined skill button (predefined or user)
+  function renderJsonSkillButton(skillDef) {
+    const btn = document.createElement('button');
+    btn.className = 'skill-btn';
+    btn.dataset.skill = skillDef.id;
+    btn.dataset.jsonSkill = 'true';
+    btn.textContent = `${skillDef.icon || '⚡'} ${skillDef.name}`;
+    btn.addEventListener('click', () => {
+      if (skillDef.needsUserInput) {
+        showUserInputPrompt(skillDef, true);
+      } else {
+        runUserSkill(skillDef);
+      }
+    });
+    return btn;
+  }
+
+  // Load and render predefined skills (JSON-defined, always on)
+  const predefinedSkills = await PredefinedSkills.getAll();
+  predefinedSkills.forEach(pSkill => {
+    skillsListEl.appendChild(renderJsonSkillButton(pSkill));
+  });
+
+  // Load and render user skills
+  const userSkills = (await UserSkills.getAll()).filter(s => s.enabled !== false);
+  if (userSkills.length > 0) {
+    const divider = document.createElement('div');
+    divider.className = 'skills-divider';
+    divider.textContent = 'User Skills';
+    skillsListEl.appendChild(divider);
+
+    userSkills.forEach(uSkill => {
+      skillsListEl.appendChild(renderJsonSkillButton(uSkill));
+    });
+  }
+
+  function showUserInputPrompt(skill, isUserSkill = false) {
     resultDiv.innerHTML = '';
     outputSection.classList.remove('hidden');
 
@@ -89,7 +125,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     submitBtn.addEventListener('click', () => {
       const text = textarea.value.trim();
       if (!text) return;
-      runSkill(skill.id, { userInput: text });
+      if (isUserSkill) {
+        runUserSkill(skill, { userInput: text });
+      } else {
+        runSkill(skill.id, { userInput: text });
+      }
     });
 
     // Submit on Ctrl+Enter
@@ -126,6 +166,91 @@ document.addEventListener('DOMContentLoaded', async () => {
   settingsLink.addEventListener('click', (e) => {
     e.preventDefault();
     chrome.runtime.openOptionsPage();
+  });
+
+  // ─── C# Symbol Hover Mode ───
+  const hoverToggle = document.getElementById('hover-toggle');
+  const hoverControls = document.getElementById('hover-controls');
+  const solutionSelect = document.getElementById('solution-select');
+  const hoverDelayInput = document.getElementById('hover-delay');
+
+  // Get active tab ID for per-tab state
+  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const activeTabId = activeTab ? activeTab.id : null;
+  const hoverTabKey = activeTabId ? `hoverEnabled_${activeTabId}` : null;
+
+  // Load persisted hover settings
+  const hoverKeys = ['hoverAlias', 'hoverDelay'];
+  if (hoverTabKey) hoverKeys.push(hoverTabKey);
+  const hoverSettings = await chrome.storage.local.get(hoverKeys);
+
+  if (hoverSettings.hoverAlias) solutionSelect.value = hoverSettings.hoverAlias;
+  if (hoverSettings.hoverDelay) hoverDelayInput.value = hoverSettings.hoverDelay;
+
+  // Restore toggle state for this tab — and re-send to content script
+  if (hoverTabKey && hoverSettings[hoverTabKey]) {
+    hoverToggle.checked = true;
+    hoverControls.classList.remove('hidden');
+    // Re-establish hover mode in content script (survives popup close, but not page refresh)
+    sendHoverMode(true);
+  }
+
+  async function sendHoverMode(enabled) {
+    const alias = solutionSelect.value;
+    const delay = parseFloat(hoverDelayInput.value) * 1000;
+
+    // Persist per-tab enabled state + global settings
+    const storageUpdate = { hoverAlias: alias, hoverDelay: hoverDelayInput.value };
+    if (hoverTabKey) storageUpdate[hoverTabKey] = enabled;
+    chrome.storage.local.set(storageUpdate);
+
+    // Send directly to content script in active tab (bypass relay)
+    if (activeTabId) {
+      try {
+        await chrome.tabs.sendMessage(activeTabId, {
+          type: 'SET_HOVER_MODE',
+          enabled,
+          alias,
+          delay
+        });
+      } catch {
+        // Content script not loaded — inject it first, then send
+        try {
+          await chrome.scripting.executeScript({
+            target: { tabId: activeTabId },
+            files: ['content/content.js']
+          });
+          await chrome.tabs.sendMessage(activeTabId, {
+            type: 'SET_HOVER_MODE',
+            enabled,
+            alias,
+            delay
+          });
+        } catch (err) {
+          console.error('[Hover] Cannot reach content script:', err);
+        }
+      }
+    }
+  }
+
+  hoverToggle.addEventListener('change', () => {
+    hoverControls.classList.toggle('hidden', !hoverToggle.checked);
+    sendHoverMode(hoverToggle.checked);
+  });
+
+  solutionSelect.addEventListener('change', () => {
+    chrome.storage.local.set({ hoverAlias: solutionSelect.value });
+    if (hoverToggle.checked) sendHoverMode(true);
+  });
+
+  hoverDelayInput.addEventListener('change', () => {
+    chrome.storage.local.set({ hoverDelay: hoverDelayInput.value });
+    if (hoverToggle.checked) sendHoverMode(true);
+  });
+
+  // Clean up per-tab keys when tabs close
+  chrome.tabs.onRemoved.addListener((tabId) => {
+    chrome.storage.local.remove(`hoverEnabled_${tabId}`);
   });
 
   // Stats panel
@@ -299,6 +424,91 @@ document.addEventListener('DOMContentLoaded', async () => {
       provider,
       messages,
       skillId
+    });
+  }
+
+  async function runUserSkill(skillDef, extraSettings) {
+    resultDiv.textContent = '';
+    outputSection.classList.remove('hidden');
+    setSkillButtonsDisabled(true);
+
+    // Get page content
+    let content;
+    try {
+      content = await chrome.runtime.sendMessage({ type: 'GET_PAGE_CONTENT' });
+    } catch {
+      content = null;
+    }
+
+    if (!content) {
+      // Show clipboard fallback
+      resultDiv.innerHTML = '';
+      const notice = document.createElement('div');
+      notice.className = 'paste-fallback';
+      notice.innerHTML = `<p>Cannot access this page. Copy content first (Ctrl+C), then paste below:</p>`;
+      const textarea = document.createElement('textarea');
+      textarea.id = 'paste-input';
+      textarea.placeholder = 'Paste content here (Ctrl+V)...';
+      textarea.rows = 5;
+      const goBtn = document.createElement('button');
+      goBtn.className = 'skill-btn';
+      goBtn.textContent = 'Go';
+      goBtn.addEventListener('click', () => {
+        const text = textarea.value.trim();
+        if (!text) return;
+        runUserSkillWithContent(skillDef, {
+          title: '(pasted content)', url: '', text, selection: text
+        }, extraSettings);
+      });
+      resultDiv.appendChild(notice);
+      resultDiv.appendChild(textarea);
+      resultDiv.appendChild(goBtn);
+      setSkillButtonsDisabled(false);
+      return;
+    }
+
+    if (skillDef.needsSelection && !content.selection) {
+      resultDiv.textContent = 'Please select some text on the page first, then try again.';
+      setSkillButtonsDisabled(false);
+      return;
+    }
+
+    runUserSkillWithContent(skillDef, content, extraSettings);
+  }
+
+  async function runUserSkillWithContent(skillDef, content, extraSettings) {
+    resultDiv.textContent = 'Thinking...';
+    setSkillButtonsDisabled(true);
+
+    const selectedLang = langSelect.value;
+    const skillSettings = { outputLang: selectedLang, ...extraSettings };
+    const provider = await Providers.getActive();
+
+    const port = chrome.runtime.connect({ name: 'ai-stream' });
+
+    port.onMessage.addListener((msg) => {
+      if (msg.type === 'STREAM_TOKEN') {
+        if (resultDiv.textContent === 'Thinking...') {
+          resultDiv.textContent = '';
+        }
+        resultDiv.textContent += msg.token;
+        outputSection.scrollTop = outputSection.scrollHeight;
+      } else if (msg.type === 'STREAM_DONE') {
+        setSkillButtonsDisabled(false);
+        port.disconnect();
+      } else if (msg.type === 'STREAM_ERROR') {
+        resultDiv.textContent = `Error: ${msg.error}`;
+        setSkillButtonsDisabled(false);
+        port.disconnect();
+      }
+    });
+
+    port.postMessage({
+      type: 'EXECUTE_SKILL_WORKFLOW',
+      skillDef,
+      context: content,
+      settings: skillSettings,
+      provider
     });
   }
 

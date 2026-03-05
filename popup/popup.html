@@ -27,6 +27,29 @@
       </div>
     </section>
 
+    <section id="hover-mode" class="hover-mode-panel">
+      <div class="hover-mode-header">
+        <span>C# Symbol Hover</span>
+        <label class="toggle-switch">
+          <input type="checkbox" id="hover-toggle">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <div class="hover-mode-controls hidden" id="hover-controls">
+        <div class="hover-mode-row">
+          <label for="solution-select">Solution</label>
+          <select id="solution-select">
+            <option value="finalizer">Finalizer</option>
+            <option value="cosmoskaq">CosmosKAQ</option>
+          </select>
+        </div>
+        <div class="hover-mode-row">
+          <label for="hover-delay">Delay (s)</label>
+          <input type="number" id="hover-delay" value="3" min="1" max="10" step="0.5">
+        </div>
+      </div>
+    </section>
+
     <section id="stats-panel" class="hidden">
       <div class="stats-header">
         <span>Usage Statistics</span>
@@ -44,6 +67,8 @@
 
   <script src="../lib/providers.js"></script>
   <script src="../lib/skills.js"></script>
+  <script src="../lib/template-engine.js"></script>
+  <script src="../lib/skill-loader.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>
