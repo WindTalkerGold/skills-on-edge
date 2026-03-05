@@ -53,7 +53,6 @@ Skills can access several types of context from the current page. Each skill exp
 | Translate | x (fallback: page) | fallback | |
 | Am I Right? | x (fallback: page) | title + fallback | x |
 | Explain | x | x (as background context) | |
-| Key Points | | x | |
 | Reply | x (fallback: page) | fallback | x |
 | C# Simple Check | | | x |
 
@@ -63,7 +62,7 @@ When creating a skill, you choose which context to pass to the LLM via template 
 
 ### JSON Workflow Skills
 
-Defined as `.json` files in `user-skills/`. The repo ships with example skills (Explain, Key Points, Reply, C# Simple Check). You can add your own. See [SKILLS.md](SKILLS.md) for the full reference.
+Defined as `.json` files in `user-skills/`. The repo ships with example skills (Explain, Reply, C# Simple Check). You can add your own. See [SKILLS.md](SKILLS.md) for the full reference.
 
 ### Content-Script Skills
 
