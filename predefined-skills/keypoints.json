@@ -1,0 +1,28 @@
+{
+  "id": "keypoints",
+  "name": "Key Points",
+  "icon": "📌",
+  "description": "Extracts key information as clear bullet points.",
+  "enabled": true,
+  "needsSelection": false,
+  "tags": ["reading"],
+  "actions": [
+    {
+      "id": "keypoints",
+      "type": "llm-chat",
+      "config": {
+        "stream": true,
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are a helpful assistant. Extract key information as clear bullet points.{{langInstruction}}"
+          },
+          {
+            "role": "user",
+            "content": "Extract the key points from the following content as a concise bullet list:\n\nTitle: {{context.title}}\n\nContent:\n{{context.text}}"
+          }
+        ]
+      }
+    }
+  ]
+}

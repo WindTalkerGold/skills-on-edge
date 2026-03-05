@@ -1,0 +1,28 @@
+{
+  "id": "explain",
+  "name": "Explain",
+  "icon": "💡",
+  "description": "Explains selected text in simple, easy-to-understand terms.",
+  "enabled": true,
+  "needsSelection": true,
+  "tags": ["reading"],
+  "actions": [
+    {
+      "id": "explain",
+      "type": "llm-chat",
+      "config": {
+        "stream": true,
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are a helpful assistant. Explain concepts clearly and simply.{{langInstruction}}"
+          },
+          {
+            "role": "user",
+            "content": "Explain the following text in simple, easy-to-understand terms:\n\n{{context.selectionOrText}}"
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -77,87 +77,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  if (message.type === 'SYMBOL_QUERY') {
+  if (message.type === 'INJECT_SKILL_CONTENT') {
     (async () => {
       try {
-        const { symbol, alias } = message;
-        const stored = await chrome.storage.local.get('roslynBaseUrl');
-        const base = stored.roslynBaseUrl || 'http://localhost:5001';
-
-        // Step 1: Search for matching types
-        const searchResp = await fetch(`${base}/${alias}/search?q=${encodeURIComponent(symbol)}`);
-        if (!searchResp.ok) {
-          sendResponse({ error: `Roslyn service error: HTTP ${searchResp.status}` });
-          return;
-        }
-        const searchJson = await searchResp.json();
-        const searchResults = searchJson.results || searchJson;
-
-        if (!searchResults || searchResults.length === 0) {
-          sendResponse({ error: `No results found for "${symbol}"` });
-          return;
-        }
-
-        // Step 2: Get full type details for the best match
-        const bestMatch = searchResults[0];
-        const fullName = bestMatch.fullName || bestMatch.FullName || bestMatch.name || bestMatch.Name;
-
-        let typeInfo = null;
-        try {
-          const typeResp = await fetch(`${base}/${alias}/type/${encodeURIComponent(fullName)}`);
-          if (typeResp.ok) {
-            typeInfo = await typeResp.json();
-          }
-        } catch { /* type endpoint failed, continue with search result */ }
-
-        // Step 3: Get references
-        let references = null;
-        try {
-          const refsResp = await fetch(`${base}/${alias}/references/${encodeURIComponent(fullName)}`);
-          if (refsResp.ok) {
-            const refsJson = await refsResp.json();
-            references = refsJson.references || refsJson;
-          }
-        } catch { /* references endpoint failed, continue without */ }
-
-        sendResponse({
-          searchResults,
-          typeInfo,
-          references,
-          matchedName: fullName
+        const { file, tabId } = message;
+        const targetTabId = tabId || (await chrome.tabs.query({ active: true, currentWindow: true }))[0]?.id;
+        if (!targetTabId) { sendResponse({ error: 'No active tab' }); return; }
+        await chrome.scripting.executeScript({
+          target: { tabId: targetTabId },
+          files: [file]
         });
-      } catch (err) {
-        sendResponse({ error: `Roslyn service unavailable: ${err.message}` });
-      }
-    })();
-    return true;
-  }
-
-  if (message.type === 'SET_HOVER_MODE') {
-    (async () => {
-      try {
-        const { enabled, alias, delay, tabId } = message;
-        // Forward to content script in the specified tab
-        const targetTabId = tabId || (sender.tab && sender.tab.id);
-        if (!targetTabId) {
-          // If from popup, get active tab
-          const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-          if (tab) {
-            await chrome.tabs.sendMessage(tab.id, {
-              type: 'SET_HOVER_MODE',
-              enabled,
-              alias,
-              delay
-            });
-          }
-        } else {
-          await chrome.tabs.sendMessage(targetTabId, {
-            type: 'SET_HOVER_MODE',
-            enabled,
-            alias,
-            delay
-          });
-        }
         sendResponse({ ok: true });
       } catch (err) {
         sendResponse({ error: err.message });

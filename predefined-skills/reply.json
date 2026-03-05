@@ -1,0 +1,28 @@
+{
+  "id": "reply",
+  "name": "Generate Reply",
+  "icon": "✉️",
+  "description": "Generates a professional reply to selected text.",
+  "enabled": true,
+  "needsSelection": true,
+  "tags": ["writing"],
+  "actions": [
+    {
+      "id": "reply",
+      "type": "llm-chat",
+      "config": {
+        "stream": true,
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are a helpful assistant. Generate professional, appropriate replies.{{langInstruction}}"
+          },
+          {
+            "role": "user",
+            "content": "Generate a professional reply to the following message or text:\n\n{{context.selectionOrText}}"
+          }
+        ]
+      }
+    }
+  ]
+}

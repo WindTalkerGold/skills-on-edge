@@ -168,89 +168,180 @@ document.addEventListener('DOMContentLoaded', async () => {
     chrome.runtime.openOptionsPage();
   });
 
-  // ─── C# Symbol Hover Mode ───
-  const hoverToggle = document.getElementById('hover-toggle');
-  const hoverControls = document.getElementById('hover-controls');
-  const solutionSelect = document.getElementById('solution-select');
-  const hoverDelayInput = document.getElementById('hover-delay');
-
-  // Get active tab ID for per-tab state
+  // ─── Content-Script Skills (dynamic loading from user-skills/) ───
+  const contentSkillsEl = document.getElementById('content-skills');
   const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
   const activeTabId = activeTab ? activeTab.id : null;
-  const hoverTabKey = activeTabId ? `hoverEnabled_${activeTabId}` : null;
 
-  // Load persisted hover settings
-  const hoverKeys = ['hoverAlias', 'hoverDelay'];
-  if (hoverTabKey) hoverKeys.push(hoverTabKey);
-  const hoverSettings = await chrome.storage.local.get(hoverKeys);
+  async function loadContentSkills() {
+    // Scan user-skills/*/skill.json via extension URL
+    // We try known skill folders by reading a manifest-like index.
+    // Since we can't list directories from a popup, we check storage for registered content skills.
+    const { contentSkillIds } = await chrome.storage.local.get('contentSkillIds');
+    const skillIds = contentSkillIds || [];
 
-  if (hoverSettings.hoverAlias) solutionSelect.value = hoverSettings.hoverAlias;
-  if (hoverSettings.hoverDelay) hoverDelayInput.value = hoverSettings.hoverDelay;
+    // Also try to discover by fetching well-known skill paths
+    // For each registered skill, load its definition
+    const skills = [];
+    for (const id of skillIds) {
+      try {
+        const url = chrome.runtime.getURL(`user-skills/${id}/skill.json`);
+        const resp = await fetch(url);
+        if (resp.ok) {
+          const def = await resp.json();
+          if (def.type === 'content-script') skills.push(def);
+        }
+      } catch { /* skill folder missing, skip */ }
+    }
 
-  // Restore toggle state for this tab — and re-send to content script
-  if (hoverTabKey && hoverSettings[hoverTabKey]) {
-    hoverToggle.checked = true;
-    hoverControls.classList.remove('hidden');
-    // Re-establish hover mode in content script (survives popup close, but not page refresh)
-    sendHoverMode(true);
+    // Auto-discover: try fetching csharp-symbol-hover if not registered
+    const knownContentSkills = ['csharp-symbol-hover'];
+    for (const id of knownContentSkills) {
+      if (skillIds.includes(id)) continue;
+      try {
+        const url = chrome.runtime.getURL(`user-skills/${id}/skill.json`);
+        const resp = await fetch(url);
+        if (resp.ok) {
+          const def = await resp.json();
+          if (def.type === 'content-script') {
+            skills.push(def);
+            skillIds.push(id);
+          }
+        }
+      } catch { /* not present */ }
+    }
+
+    // Persist discovered skills
+    if (skillIds.length > 0) {
+      chrome.storage.local.set({ contentSkillIds: skillIds });
+    }
+
+    return skills;
   }
 
-  async function sendHoverMode(enabled) {
-    const alias = solutionSelect.value;
-    const delay = parseFloat(hoverDelayInput.value) * 1000;
+  const contentSkills = await loadContentSkills();
+  for (const skill of contentSkills) {
+    const panel = document.createElement('section');
+    panel.className = 'content-skill-panel';
 
-    // Persist per-tab enabled state + global settings
-    const storageUpdate = { hoverAlias: alias, hoverDelay: hoverDelayInput.value };
-    if (hoverTabKey) storageUpdate[hoverTabKey] = enabled;
-    chrome.storage.local.set(storageUpdate);
+    const tabKey = activeTabId ? `cs_${skill.id}_${activeTabId}` : null;
+    const configKeys = Object.keys(skill.config || {});
+    const storageKeys = configKeys.map(k => `cs_${skill.id}_${k}`);
+    if (tabKey) storageKeys.push(tabKey);
+    const stored = await chrome.storage.local.get(storageKeys);
 
-    // Send directly to content script in active tab (bypass relay)
-    if (activeTabId) {
+    // Header with toggle
+    const header = document.createElement('div');
+    header.className = 'hover-mode-header';
+    header.innerHTML = `<span>${skill.icon || ''} ${skill.name}</span>`;
+    const toggleLabel = document.createElement('label');
+    toggleLabel.className = 'toggle-switch';
+    const toggleInput = document.createElement('input');
+    toggleInput.type = 'checkbox';
+    const toggleSlider = document.createElement('span');
+    toggleSlider.className = 'toggle-slider';
+    toggleLabel.appendChild(toggleInput);
+    toggleLabel.appendChild(toggleSlider);
+    header.appendChild(toggleLabel);
+    panel.appendChild(header);
+
+    // Config controls
+    const controls = document.createElement('div');
+    controls.className = 'hover-mode-controls hidden';
+
+    const config = skill.config || {};
+    const configInputs = {};
+    for (const [key, defaultVal] of Object.entries(config)) {
+      const row = document.createElement('div');
+      row.className = 'hover-mode-row';
+      const label = document.createElement('label');
+      label.textContent = key.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase()).trim();
+      row.appendChild(label);
+
+      const input = document.createElement('input');
+      const storedVal = stored[`cs_${skill.id}_${key}`];
+      if (typeof defaultVal === 'number') {
+        input.type = 'number';
+        input.value = storedVal != null ? storedVal : defaultVal;
+        input.min = 0;
+        input.step = key.toLowerCase().includes('delay') ? '500' : '1';
+      } else {
+        input.type = 'text';
+        input.value = storedVal != null ? storedVal : defaultVal;
+        input.placeholder = `e.g. ${defaultVal || 'value'}`;
+      }
+      input.addEventListener('change', () => {
+        chrome.storage.local.set({ [`cs_${skill.id}_${key}`]: input.value });
+        if (toggleInput.checked) sendSkillMode(true);
+      });
+      row.appendChild(input);
+      controls.appendChild(row);
+      configInputs[key] = input;
+    }
+    panel.appendChild(controls);
+    contentSkillsEl.appendChild(panel);
+
+    // Restore state
+    if (tabKey && stored[tabKey]) {
+      toggleInput.checked = true;
+      controls.classList.remove('hidden');
+      sendSkillMode(true);
+    }
+
+    async function sendSkillMode(enabled) {
+      const cfgValues = {};
+      for (const [key, input] of Object.entries(configInputs)) {
+        cfgValues[key] = input.type === 'number' ? parseFloat(input.value) : input.value;
+      }
+
+      // Persist per-tab state
+      const update = {};
+      if (tabKey) update[tabKey] = enabled;
+      for (const [key, val] of Object.entries(cfgValues)) {
+        update[`cs_${skill.id}_${key}`] = typeof val === 'number' ? String(val) : val;
+      }
+      chrome.storage.local.set(update);
+
+      if (!activeTabId) return;
+
+      if (enabled) {
+        // Inject the skill's content script
+        try {
+          await chrome.runtime.sendMessage({
+            type: 'INJECT_SKILL_CONTENT',
+            file: `user-skills/${skill.id}/${skill.contentScript}`,
+            tabId: activeTabId
+          });
+        } catch (err) {
+          console.error(`[ContentSkill] Failed to inject ${skill.id}:`, err);
+          return;
+        }
+      }
+
+      // Send config to the content script
       try {
         await chrome.tabs.sendMessage(activeTabId, {
           type: 'SET_HOVER_MODE',
           enabled,
-          alias,
-          delay
+          alias: cfgValues.alias || '',
+          delay: cfgValues.delay || 3000,
+          roslynBaseUrl: cfgValues.roslynBaseUrl || 'http://localhost:5001'
         });
       } catch {
-        // Content script not loaded — inject it first, then send
-        try {
-          await chrome.scripting.executeScript({
-            target: { tabId: activeTabId },
-            files: ['content/content.js']
-          });
-          await chrome.tabs.sendMessage(activeTabId, {
-            type: 'SET_HOVER_MODE',
-            enabled,
-            alias,
-            delay
-          });
-        } catch (err) {
-          console.error('[Hover] Cannot reach content script:', err);
-        }
+        // Content script may not be injected yet if disabling — ignore
       }
     }
+
+    toggleInput.addEventListener('change', () => {
+      controls.classList.toggle('hidden', !toggleInput.checked);
+      sendSkillMode(toggleInput.checked);
+    });
   }
-
-  hoverToggle.addEventListener('change', () => {
-    hoverControls.classList.toggle('hidden', !hoverToggle.checked);
-    sendHoverMode(hoverToggle.checked);
-  });
-
-  solutionSelect.addEventListener('change', () => {
-    chrome.storage.local.set({ hoverAlias: solutionSelect.value });
-    if (hoverToggle.checked) sendHoverMode(true);
-  });
-
-  hoverDelayInput.addEventListener('change', () => {
-    chrome.storage.local.set({ hoverDelay: hoverDelayInput.value });
-    if (hoverToggle.checked) sendHoverMode(true);
-  });
 
   // Clean up per-tab keys when tabs close
   chrome.tabs.onRemoved.addListener((tabId) => {
-    chrome.storage.local.remove(`hoverEnabled_${tabId}`);
+    const keysToRemove = contentSkills.map(s => `cs_${s.id}_${tabId}`);
+    if (keysToRemove.length > 0) chrome.storage.local.remove(keysToRemove);
   });
 
   // Stats panel

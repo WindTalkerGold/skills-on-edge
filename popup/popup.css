@@ -303,8 +303,8 @@ h1 {
   text-align: left;
 }
 
-/* C# Symbol Hover Mode */
-.hover-mode-panel {
+/* Content-Script Skill Panels */
+.content-skill-panel {
   margin-top: 12px;
   padding: 10px 12px;
   background: #16213e;
@@ -388,7 +388,8 @@ h1 {
 }
 
 .hover-mode-row select,
-.hover-mode-row input[type="number"] {
+.hover-mode-row input[type="number"],
+.hover-mode-row input[type="text"] {
   flex: 1;
   max-width: 140px;
   padding: 4px 8px;
@@ -401,7 +402,8 @@ h1 {
 }
 
 .hover-mode-row select:focus,
-.hover-mode-row input[type="number"]:focus {
+.hover-mode-row input[type="number"]:focus,
+.hover-mode-row input[type="text"]:focus {
   outline: none;
   border-color: #4a9eff;
 }
