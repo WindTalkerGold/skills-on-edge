@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Skills on Edge</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Skills on Edge</h1>
+      <p class="subtitle">AI-powered reading assistant</p>
+    </header>
+
+    <section id="skills-list">
+      <button class="skill-btn" data-skill="summarize">Summarize Page</button>
+      <button class="skill-btn" data-skill="explain">Explain Selection</button>
+      <button class="skill-btn" data-skill="translate">Translate</button>
+      <button class="skill-btn" data-skill="keypoints">Key Points</button>
+    </section>
+
+    <section id="output" class="hidden">
+      <div id="result"></div>
+      <button id="close-output" class="secondary-btn">Close</button>
+    </section>
+
+    <footer>
+      <a href="#" id="settings-link">Settings</a>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
