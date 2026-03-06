@@ -1,0 +1,24 @@
+{
+  "id": "ask",
+  "name": "Ask",
+  "icon": "\u2753",
+  "description": "Ask a question about the page content.",
+  "enabled": true,
+  "needsSelection": false,
+  "needsUserInput": true,
+  "inputPlaceholder": "Ask a question about this page...",
+  "tags": ["reading"],
+  "actions": [
+    {
+      "id": "ask",
+      "type": "llm-chat",
+      "config": {
+        "stream": true,
+        "messages": [
+          { "role": "system", "content": "You are a helpful assistant. Answer the user's question based on the provided page content and your general knowledge. Be concise and direct. If the content doesn't contain enough information to fully answer, say so and answer with what you can.{{langInstruction}}" },
+          { "role": "user", "content": "Page content:\n\nTitle: {{context.title}}\n\n{{context.selectionOrText}}\n\n---\n\nQuestion: {{settings.userInput}}" }
+        ]
+      }
+    }
+  ]
+}

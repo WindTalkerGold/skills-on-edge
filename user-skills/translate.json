@@ -1,0 +1,22 @@
+{
+  "id": "translate",
+  "name": "Translate",
+  "icon": "\ud83c\udf10",
+  "description": "Translates selected text or full page to your output language.",
+  "enabled": true,
+  "needsSelection": false,
+  "tags": ["reading"],
+  "actions": [
+    {
+      "id": "translate",
+      "type": "llm-chat",
+      "config": {
+        "stream": true,
+        "messages": [
+          { "role": "system", "content": "You are a professional translator. Translate to {{settings.outputLang}} faithfully, sentence by sentence, preserving the original structure. Translate every sentence \u2014 do not summarize, skip, or rephrase. Match the original word order and paragraph breaks as closely as the target language allows. Do not add commentary." },
+          { "role": "user", "content": "Translate the following text to {{settings.outputLang}} sentence by sentence. Preserve every statement faithfully:\n\n{{context.selectionOrText}}" }
+        ]
+      }
+    }
+  ]
+}
