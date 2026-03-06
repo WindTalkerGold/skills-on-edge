@@ -9,6 +9,10 @@ Thumbs.db
 .claude/
 user-skills/*
 !user-skills/.gitkeep
+!user-skills/summarize.json
+!user-skills/translate.json
+!user-skills/ask.json
+!user-skills/writer-check.json
 !user-skills/explain.json
 !user-skills/reply.json
 !user-skills/csharp-simple-check.json

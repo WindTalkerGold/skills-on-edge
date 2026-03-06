@@ -1,0 +1,24 @@
+{
+  "id": "writer-check",
+  "name": "Writer Check",
+  "icon": "✍️",
+  "description": "Paste text and optionally describe how to improve it. Gets concise editing suggestions.",
+  "enabled": true,
+  "needsSelection": false,
+  "needsUserInput": true,
+  "inputPlaceholder": "Paste your text here. Optionally add guidelines after --- (e.g. make it more concise, fix grammar, formal tone)",
+  "tags": ["writing"],
+  "actions": [
+    {
+      "id": "check",
+      "type": "llm-chat",
+      "config": {
+        "stream": true,
+        "messages": [
+          { "role": "system", "content": "You are a sharp writing editor. The user will give you text to review, and optionally guidelines separated by ---. Review the text and suggest improvements. Be direct and specific:\n- Point out awkward phrasing, redundancy, grammar issues, unclear sentences\n- If guidelines are given, focus on those\n- Show concrete rewrites, not vague advice\n- Use a brief format: quote the original → suggest the fix\n- If the text is already good, say so briefly\n- Keep your response concise{{langInstruction}}" },
+          { "role": "user", "content": "{{settings.userInput}}" }
+        ]
+      }
+    }
+  ]
+}

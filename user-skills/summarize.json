@@ -1,0 +1,22 @@
+{
+  "id": "summarize",
+  "name": "Summarize",
+  "icon": "\ud83d\udcdd",
+  "description": "Summarizes the page in 3-7 concise bullet points.",
+  "enabled": true,
+  "needsSelection": false,
+  "tags": ["reading"],
+  "actions": [
+    {
+      "id": "summarize",
+      "type": "llm-chat",
+      "config": {
+        "stream": true,
+        "messages": [
+          { "role": "system", "content": "You are a summarization expert. Be extremely brief and dense. Output a short bullet list (3-7 bullets max). Each bullet should be one short sentence. No introduction, no conclusion, no filler. If the content is short, the summary should be even shorter. Aim for 10-20% of the original length.{{langInstruction}}" },
+          { "role": "user", "content": "Summarize this page in a few brief bullet points. Be ultra-concise \u2014 every word must earn its place.\n\nTitle: {{context.title}}\n\n{{context.text}}" }
+        ]
+      }
+    }
+  ]
+}

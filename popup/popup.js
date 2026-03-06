@@ -54,47 +54,24 @@ document.addEventListener('DOMContentLoaded', async () => {
     chrome.storage.local.set({ outputLang: langSelect.value });
   });
 
-  // Render hardcoded skill buttons (Summarize, Translate, Am I Right)
-  const skills = getAllSkills();
-  skills.forEach(skill => {
+  // Load and render all skills (bundled + user) via UserSkills.getAll()
+  const allSkills = (await UserSkills.getAll()).filter(s => s.enabled !== false);
+  allSkills.forEach(skillDef => {
     const btn = document.createElement('button');
     btn.className = 'skill-btn';
-    btn.dataset.skill = skill.id;
-    btn.textContent = `${skill.icon} ${skill.name}`;
+    btn.dataset.skill = skillDef.id;
+    btn.textContent = `${skillDef.icon || '⚡'} ${skillDef.name}`;
     btn.addEventListener('click', () => {
-      if (skill.needsUserInput) {
-        showUserInputPrompt(skill);
+      if (skillDef.needsUserInput) {
+        showUserInputPrompt(skillDef);
       } else {
-        runSkill(skill.id);
+        runSkill(skillDef);
       }
     });
     skillsListEl.appendChild(btn);
   });
 
-  // Helper to render a JSON-defined skill button (predefined or user)
-  function renderJsonSkillButton(skillDef) {
-    const btn = document.createElement('button');
-    btn.className = 'skill-btn';
-    btn.dataset.skill = skillDef.id;
-    btn.dataset.jsonSkill = 'true';
-    btn.textContent = `${skillDef.icon || '⚡'} ${skillDef.name}`;
-    btn.addEventListener('click', () => {
-      if (skillDef.needsUserInput) {
-        showUserInputPrompt(skillDef, true);
-      } else {
-        runUserSkill(skillDef);
-      }
-    });
-    return btn;
-  }
-
-  // Load and render user skills (file-based examples + storage-imported)
-  const userSkills = (await UserSkills.getAll()).filter(s => s.enabled !== false);
-  userSkills.forEach(uSkill => {
-    skillsListEl.appendChild(renderJsonSkillButton(uSkill));
-  });
-
-  function showUserInputPrompt(skill, isUserSkill = false) {
+  function showUserInputPrompt(skillDef) {
     resultDiv.innerHTML = '';
     outputSection.classList.remove('hidden');
 
@@ -103,7 +80,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const textarea = document.createElement('textarea');
     textarea.id = 'user-input';
-    textarea.placeholder = skill.inputPlaceholder || 'Type here...';
+    textarea.placeholder = skillDef.inputPlaceholder || 'Type here...';
     textarea.rows = 4;
 
     const submitBtn = document.createElement('button');
@@ -112,11 +89,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     submitBtn.addEventListener('click', () => {
       const text = textarea.value.trim();
       if (!text) return;
-      if (isUserSkill) {
-        runUserSkill(skill, { userInput: text });
-      } else {
-        runSkill(skill.id, { userInput: text });
-      }
+      runSkill(skillDef, { userInput: text });
     });
 
     // Submit on Ctrl+Enter
@@ -161,14 +134,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   const activeTabId = activeTab ? activeTab.id : null;
 
   async function loadContentSkills() {
-    // Scan user-skills/*/skill.json via extension URL
-    // We try known skill folders by reading a manifest-like index.
-    // Since we can't list directories from a popup, we check storage for registered content skills.
     const { contentSkillIds } = await chrome.storage.local.get('contentSkillIds');
     const skillIds = contentSkillIds || [];
 
-    // Also try to discover by fetching well-known skill paths
-    // For each registered skill, load its definition
     const skills = [];
     for (const id of skillIds) {
       try {
@@ -179,28 +147,6 @@ document.addEventListener('DOMContentLoaded', async () => {
           if (def.type === 'content-script') skills.push(def);
         }
       } catch { /* skill folder missing, skip */ }
-    }
-
-    // Auto-discover: try fetching csharp-symbol-hover if not registered
-    const knownContentSkills = ['csharp-symbol-hover'];
-    for (const id of knownContentSkills) {
-      if (skillIds.includes(id)) continue;
-      try {
-        const url = chrome.runtime.getURL(`user-skills/${id}/skill.json`);
-        const resp = await fetch(url);
-        if (resp.ok) {
-          const def = await resp.json();
-          if (def.type === 'content-script') {
-            skills.push(def);
-            skillIds.push(id);
-          }
-        }
-      } catch { /* not present */ }
-    }
-
-    // Persist discovered skills
-    if (skillIds.length > 0) {
-      chrome.storage.local.set({ contentSkillIds: skillIds });
     }
 
     return skills;
@@ -305,14 +251,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
       }
 
-      // Send config to the content script
+      // Send config to the content script (generic format)
       try {
         await chrome.tabs.sendMessage(activeTabId, {
-          type: 'SET_HOVER_MODE',
+          type: 'SET_SKILL_MODE',
+          skillId: skill.id,
           enabled,
-          alias: cfgValues.alias || '',
-          delay: cfgValues.delay || 3000,
-          roslynBaseUrl: cfgValues.roslynBaseUrl || 'http://localhost:5001'
+          config: cfgValues
         });
       } catch {
         // Content script may not be injected yet if disabling — ignore
@@ -397,136 +342,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     return html;
   }
 
-  // Track pending skill when waiting for clipboard paste
-  let pendingSkillId = null;
+  // ─── Unified skill execution ───
 
-  async function runSkill(skillId, extraSettings) {
-    const skill = getSkill(skillId);
-    if (!skill) return;
-
-    resultDiv.textContent = '';
-    outputSection.classList.remove('hidden');
-    setSkillButtonsDisabled(true);
-
-    // Get page content
-    let content;
-    try {
-      content = await chrome.runtime.sendMessage({ type: 'GET_PAGE_CONTENT' });
-    } catch {
-      content = null;
-    }
-
-    if (!content) {
-      // Show clipboard fallback
-      pendingSkillId = skillId;
-      resultDiv.innerHTML = '';
-      const notice = document.createElement('div');
-      notice.className = 'paste-fallback';
-      notice.innerHTML = `<p>Cannot access this page. Copy content first (Ctrl+C), then paste below:</p>`;
-      const textarea = document.createElement('textarea');
-      textarea.id = 'paste-input';
-      textarea.placeholder = 'Paste content here (Ctrl+V)...';
-      textarea.rows = 5;
-      const goBtn = document.createElement('button');
-      goBtn.className = 'skill-btn';
-      goBtn.textContent = 'Go';
-      goBtn.addEventListener('click', () => {
-        const text = textarea.value.trim();
-        if (!text) return;
-        runSkillWithContent(skillId, {
-          title: '(pasted content)',
-          url: '',
-          text,
-          selection: text
-        }, extraSettings);
-      });
-      resultDiv.appendChild(notice);
-      resultDiv.appendChild(textarea);
-      resultDiv.appendChild(goBtn);
-      setSkillButtonsDisabled(false);
-      return;
-    }
-
-    if (skill.needsSelection && !content.selection) {
-      resultDiv.textContent = 'Please select some text on the page first, then try again.';
-      setSkillButtonsDisabled(false);
-      return;
-    }
-
-    // Debug: show selection size so user knows what was captured
-    console.log(`[Skills on Edge] Selection captured: ${content.selection?.length || 0} chars`);
-
-    runSkillWithContent(skillId, content, extraSettings);
-  }
-
-  async function runSkillWithContent(skillId, content, extraSettings) {
-    const skill = getSkill(skillId);
-    if (!skill) return;
-
-    resultDiv.textContent = '';
-    setSkillButtonsDisabled(true);
-
-    // Build settings from current language selection
-    const selectedLang = langSelect.value;
-    const skillSettings = { outputLang: selectedLang, ...extraSettings };
-
-    // For translate, also set translateLang to the same output language
-    if (skillId === 'translate') {
-      skillSettings.translateLang = selectedLang;
-    }
-
-    const provider = await Providers.getActive();
-
-    // For summarize with large content, use chunked multi-round approach
-    // Threshold: use 60% of context window (leave room for system prompt + output)
-    // contextWindow is in k tokens, ~3.5 chars per token
-    const contextChars = (provider.contextWindow || 128) * 1000 * 3.5 * 0.6;
-    const textToCheck = content.text || '';
-    const useChunked = skillId === 'summarize' && textToCheck.length > contextChars;
-
-    const messages = useChunked ? null : skill.buildMessages(content, skillSettings);
-
-    // Stream via background service worker
-    resultDiv.textContent = useChunked ? 'Analyzing long content...' : 'Thinking...';
-
-    const port = chrome.runtime.connect({ name: 'ai-stream' });
-
-    port.onMessage.addListener((msg) => {
-      if (msg.type === 'STREAM_TOKEN') {
-        if (resultDiv.textContent === 'Thinking...' || resultDiv.textContent === 'Analyzing long content...') {
-          resultDiv.textContent = '';
-        }
-        resultDiv.textContent += msg.token;
-        outputSection.scrollTop = outputSection.scrollHeight;
-      } else if (msg.type === 'STREAM_DONE') {
-        setSkillButtonsDisabled(false);
-        port.disconnect();
-      } else if (msg.type === 'STREAM_ERROR') {
-        resultDiv.textContent = `Error: ${msg.error}`;
-        setSkillButtonsDisabled(false);
-        port.disconnect();
-      }
-    });
-
-    if (useChunked) {
-      port.postMessage({
-        type: 'CHUNKED_SUMMARIZE',
-        provider,
-        content,
-        settings: skillSettings,
-        skillId
-      });
-    } else {
-      port.postMessage({
-        type: 'STREAM_REQUEST',
-        provider,
-        messages,
-        skillId
-      });
-    }
-  }
-
-  async function runUserSkill(skillDef, extraSettings) {
+  async function runSkill(skillDef, extraSettings) {
     resultDiv.textContent = '';
     outputSection.classList.remove('hidden');
     setSkillButtonsDisabled(true);
@@ -555,7 +373,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       goBtn.addEventListener('click', () => {
         const text = textarea.value.trim();
         if (!text) return;
-        runUserSkillWithContent(skillDef, {
+        runSkillWithContent(skillDef, {
           title: '(pasted content)', url: '', text, selection: text
         }, extraSettings);
       });
@@ -572,10 +390,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       return;
     }
 
-    runUserSkillWithContent(skillDef, content, extraSettings);
+    runSkillWithContent(skillDef, content, extraSettings);
   }
 
-  async function runUserSkillWithContent(skillDef, content, extraSettings) {
+  async function runSkillWithContent(skillDef, content, extraSettings) {
     resultDiv.textContent = 'Thinking...';
     setSkillButtonsDisabled(true);
 
